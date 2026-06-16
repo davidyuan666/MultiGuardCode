@@ -12,13 +12,14 @@ from config import (
 
 
 class CD4CodeSuppressor:
-    def __init__(self):
+    def __init__(self, disabled_tiers=None):
         self.tier1_threshold = TIER1_CONFIDENCE_THRESHOLD
         self.tier4_threshold = TIER4_DEFECT_THRESHOLD
         self.failure_count = 0
         self.total_count = 0
         self.tier_stats = {"t1_filtered": 0, "t2_filtered": 0,
                           "t3_degraded": 0, "t4_activated": 0}
+        self.disabled_tiers = set(disabled_tiers or [])
 
     def tier1_proofreading(self, code):
         """Token-level confidence filtering (DNA Polymerase Proofreading analog).
@@ -26,22 +27,18 @@ class CD4CodeSuppressor:
         Rejects code with obviously malformed patterns that low-confidence
         token sampling would produce: extreme repetition, empty blocks, etc.
         """
-        if not code or len(code.strip()) < 20:
+        if not code or len(code.strip()) < 5:
             self.tier_stats["t1_filtered"] += 1
+            self.record_failure()
             return None
 
         lines = code.strip().split('\n')
 
-        # Reject if > 60% of lines are just whitespace/empty
-        empty_ratio = sum(1 for l in lines if not l.strip()) / max(len(lines), 1)
-        if empty_ratio > 0.6:
-            self.tier_stats["t1_filtered"] += 1
-            return None
-
-        # Reject extreme line repetition pattern (> 5 identical consecutive lines)
-        for i in range(len(lines) - 5):
-            if len(set(lines[i:i+5])) == 1 and lines[i].strip():
+        # Reject extreme repetition (>10 consecutive identical non-empty lines)
+        for i in range(len(lines) - 10):
+            if len(set(lines[i:i+10])) == 1 and lines[i].strip():
                 self.tier_stats["t1_filtered"] += 1
+                self.record_failure()
                 return None
 
         return code
@@ -51,19 +48,36 @@ class CD4CodeSuppressor:
 
         Checks syntax validity via AST parsing.
         """
+        code = self._extract_function_code(code)
         try:
             ast.parse(code)
         except SyntaxError as e:
             self.tier_stats["t2_filtered"] += 1
+            self.record_failure()
             return None, str(e)
 
         return code, None
 
     def _extract_function_code(self, code, entry_point=None):
-        code = code.strip()
-        code = re.sub(r'^```(?:python)?\s*\n?', '', code)
-        code = re.sub(r'\n?```\s*$', '', code)
-        code = code.replace('\r\n', '\n')
+        code = code.replace('\r\n', '\n').strip()
+
+        fence_start = re.search(r'^```(?:python\w*)?\s*$', code, re.MULTILINE)
+        if fence_start:
+            after_open = code[fence_start.end():]
+            fence_end = re.search(r'^```\s*$', after_open, re.MULTILINE)
+            if fence_end:
+                code = after_open[:fence_end.start()]
+            else:
+                code = after_open
+            code = code.strip()
+
+        # If still has preamble text, try to find actual code start
+        if not re.match(r'^\s*(def\s|\w+\s*=\s*|import\s|\bfrom\s|class\s)', code):
+            match = re.search(
+                r'(?:^|\n)(def\s+\w+|import\s+\w+|from\s+\w+\s+import|\bclass\s+\w+)', code)
+            if match:
+                code = code[match.start():].lstrip('\n')
+
         return code
 
     def tier3_test_degradation(self, code, test_code, entry_point, client=None, generate_fn=None):
@@ -81,9 +95,9 @@ class CD4CodeSuppressor:
                     f"Error: {error_msg}\n\n"
                     f"Write the corrected version of the code. Return ONLY the code."
                 )
-                new_code = generate_fn(fix_prompt, client=client)
-                if new_code:
-                    code = self._extract_function_code(new_code)
+                new_codes = generate_fn(fix_prompt, client=client)
+                if new_codes and new_codes[0]:
+                    code = self._extract_function_code(new_codes[0])
 
         self.tier_stats["t3_degraded"] += 1
         return None, False
@@ -92,7 +106,10 @@ class CD4CodeSuppressor:
         full_code = f"{code}\n\n{test_code}\n\n"
         if entry_point:
             full_code += f"if __name__ == '__main__':\n"
-            full_code += f"    test_{entry_point}()\n" if entry_point else "    pass\n"
+            if 'def check(' in test_code:
+                full_code += f"    check({entry_point})\n"
+            else:
+                full_code += "    pass\n"
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False,
                                          encoding='utf-8') as f:
@@ -118,7 +135,6 @@ class CD4CodeSuppressor:
 
         Returns True if conservative mode should be activated.
         """
-        self.total_count += 1
         ratio = self.failure_count / max(self.total_count, 1)
         if ratio >= self.tier4_threshold and self.total_count > 10:
             self.tier_stats["t4_activated"] += 1
@@ -130,7 +146,11 @@ class CD4CodeSuppressor:
 
     def process(self, code, test_code=None, entry_point=None,
                 client=None, generate_fn=None):
-        """Apply all four CD4Code tiers to a generated code sample."""
+        """Apply CD4Code tiers to a generated code sample.
+
+        Tiers listed in self.disabled_tiers are bypassed (code passes through).
+        Use disabled_tiers=[1,2,3,4] for ablation studies.
+        """
         result = {
             "original_code": code,
             "passed_t1": False,
@@ -141,17 +161,32 @@ class CD4CodeSuppressor:
             "success": False,
         }
 
-        code = self.tier1_proofreading(code)
-        if code is None:
-            return result
-        result["passed_t1"] = True
+        self.total_count += 1
 
-        code, syntax_error = self.tier2_mismatch_repair(code)
-        if code is None:
-            return result
-        result["passed_t2"] = True
+        code = self._extract_function_code(code)
 
-        if test_code:
+        # Check tier4 before processing
+        if 4 not in self.disabled_tiers:
+            result["t4_conservative"] = self.tier4_global_monitor()
+
+        if 1 not in self.disabled_tiers:
+            code = self.tier1_proofreading(code)
+            if code is None:
+                return result
+            result["passed_t1"] = True
+        else:
+            result["passed_t1"] = True
+
+        if 2 not in self.disabled_tiers:
+            code, syntax_error = self.tier2_mismatch_repair(code)
+            if code is None:
+                return result
+            result["passed_t2"] = True
+        else:
+            code = self._extract_function_code(code)
+            result["passed_t2"] = True
+
+        if test_code and 3 not in self.disabled_tiers:
             code, passed = self.tier3_test_degradation(
                 code, test_code, entry_point, client, generate_fn
             )
@@ -159,8 +194,13 @@ class CD4CodeSuppressor:
                 self.record_failure()
                 return result
             result["passed_t3"] = True
+        elif test_code:
+            passed, _ = self._run_tests(code, test_code, entry_point)
+            if not passed:
+                self.record_failure()
+                return result
+            result["passed_t3"] = True
 
-        result["t4_conservative"] = self.tier4_global_monitor()
         result["final_code"] = code
         result["success"] = True
         return result

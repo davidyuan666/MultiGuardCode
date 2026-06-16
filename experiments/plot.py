@@ -10,12 +10,13 @@ def plot_defect_density_curve(base_density_history, cd4code_density_history,
                               save_path="defect_density_curve.pdf"):
     fig, ax = plt.subplots(figsize=(6, 4))
 
-    attempts = list(range(1, len(cd4code_density_history) + 1))
-
     if base_density_history:
-        ax.plot(attempts, base_density_history, 'r--', linewidth=1.5,
+        base_x = list(range(1, len(base_density_history) + 1))
+        ax.plot(base_x, base_density_history, 'r--', linewidth=1.5,
                 label='Base (No Suppression)', alpha=0.7)
-    ax.plot(attempts, cd4code_density_history, 'b-', linewidth=2.0,
+
+    cd4code_x = list(range(1, len(cd4code_density_history) + 1))
+    ax.plot(cd4code_x, cd4code_density_history, 'b-', linewidth=2.0,
             label='CD4Code (Four Tiers)')
 
     ax.axvline(x=40, color='orange', linestyle=':', linewidth=1,

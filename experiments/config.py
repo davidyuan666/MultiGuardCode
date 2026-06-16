@@ -8,7 +8,7 @@ import os
 # DeepSeek API configuration
 DEEPSEEK_API_KEY = os.environ["DEEPSEEK_API_KEY"]
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-DEEPSEEK_MODEL = "deepseek-chat"
+DEEPSEEK_MODEL = "deepseek-v4-flash"
 
 # Proxy configuration (from environment variable)
 HTTP_PROXY = os.environ.get("HTTP_PROXY", os.environ.get("http_proxy", ""))
