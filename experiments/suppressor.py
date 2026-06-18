@@ -1,4 +1,4 @@
-"""CD4Code: Four-Tier Error Suppression Framework."""
+"""MultiGuardCode: Four-Tier Error Suppression Framework."""
 import ast
 import subprocess
 import tempfile
@@ -11,7 +11,7 @@ from config import (
 )
 
 
-class CD4CodeSuppressor:
+class MultiGuardCodeSuppressor:
     def __init__(self, disabled_tiers=None, tier4_threshold_override=None,
                  t1_min_length_override=None, t1_rep_window_override=None):
         self.tier1_threshold = TIER1_CONFIDENCE_THRESHOLD
@@ -27,11 +27,11 @@ class CD4CodeSuppressor:
         self.disabled_tiers = set(disabled_tiers or [])
         self.per_problem_tier_path = {}
 
-    def tier1_proofreading(self, code):
-        """Token-level confidence filtering (DNA Polymerase Proofreading analog).
+    def tier1_output_filter(self, code):
+        """Lightweight output quality filtering.
 
-        Rejects code with obviously malformed patterns that low-confidence
-        token sampling would produce: extreme repetition, empty blocks, etc.
+        Rejects code with obviously malformed patterns such as
+        extreme repetition or empty blocks.
         """
         if not code or len(code.strip()) < self.t1_min_length:
             self.tier_stats["t1_filtered"] += 1
@@ -49,10 +49,10 @@ class CD4CodeSuppressor:
 
         return code
 
-    def tier2_mismatch_repair(self, code):
-        """Structural static analysis (Mismatch Repair analog).
+    def tier2_ast_validate(self, code):
+        """Structural static analysis via AST parsing.
 
-        Checks syntax validity via AST parsing.
+        Checks syntax validity of extracted code.
         """
         code = self._extract_function_code(code)
         try:
@@ -77,7 +77,6 @@ class CD4CodeSuppressor:
                 code = after_open
             code = code.strip()
 
-        # If still has preamble text, try to find actual code start
         if not re.match(r'^\s*(def\s|\w+\s*=\s*|import\s|\bfrom\s|class\s)', code):
             match = re.search(
                 r'(?:^|\n)(def\s+\w+|import\s+\w+|from\s+\w+\s+import|\bclass\s+\w+)', code)
@@ -86,8 +85,12 @@ class CD4CodeSuppressor:
 
         return code
 
-    def tier3_test_degradation(self, code, test_code, entry_point, client=None, generate_fn=None, token_tracker=None):
-        """Test-driven discard and regeneration (Ubiquitin-Proteasome analog)."""
+    def tier3_test_repair(self, code, test_code, entry_point, client=None, generate_fn=None, token_tracker=None):
+        """Test-driven iterative repair.
+
+        Executes code against test cases and regenerates on failure
+        with failure-aware prompts (up to TIER3_MAX_RETRIES attempts).
+        """
         code = self._extract_function_code(code)
 
         for attempt in range(TIER3_MAX_RETRIES):
@@ -136,10 +139,11 @@ class CD4CodeSuppressor:
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
-    def tier4_global_monitor(self):
-        """Global defect density monitoring (ER Stress Response analog).
+    def tier4_defect_monitor(self):
+        """Global defect density monitoring.
 
-        Returns True if conservative mode should be activated.
+        Returns True if conservative generation mode should be activated
+        when the cumulative failure rate exceeds the threshold.
         """
         ratio = self.failure_count / max(self.total_count, 1)
         if ratio >= self.tier4_threshold and self.total_count > 10:
@@ -153,7 +157,7 @@ class CD4CodeSuppressor:
     def process(self, code, test_code=None, entry_point=None,
                 client=None, generate_fn=None, token_tracker=None,
                 problem_id=None):
-        """Apply CD4Code tiers to a generated code sample.
+        """Apply MultiGuardCode tiers to a generated code sample.
 
         Tiers listed in self.disabled_tiers are bypassed (code passes through).
         Use disabled_tiers=[1,2,3,4] for ablation studies.
@@ -175,7 +179,7 @@ class CD4CodeSuppressor:
         code = self._extract_function_code(code)
 
         if 4 not in self.disabled_tiers:
-            result["t4_conservative"] = self.tier4_global_monitor()
+            result["t4_conservative"] = self.tier4_defect_monitor()
             self.t4_activation_history.append(result["t4_conservative"])
             result["tier_path"]["t4"] = "active" if result["t4_conservative"] else "inactive"
             if result["t4_conservative"]:
@@ -188,7 +192,7 @@ class CD4CodeSuppressor:
             result["tier_path"]["t4"] = "bypass"
 
         if 1 not in self.disabled_tiers:
-            code = self.tier1_proofreading(code)
+            code = self.tier1_output_filter(code)
             if code is None:
                 result["tier_path"]["t1"] = "filtered"
                 self.per_problem_tier_path[pid] = result["tier_path"]
@@ -199,7 +203,7 @@ class CD4CodeSuppressor:
             result["passed_t1"] = True
 
         if 2 not in self.disabled_tiers:
-            code, syntax_error = self.tier2_mismatch_repair(code)
+            code, syntax_error = self.tier2_ast_validate(code)
             if code is None:
                 result["tier_path"]["t2"] = "filtered"
                 self.per_problem_tier_path[pid] = result["tier_path"]
@@ -211,7 +215,7 @@ class CD4CodeSuppressor:
             result["passed_t2"] = True
 
         if test_code and 3 not in self.disabled_tiers:
-            code, passed = self.tier3_test_degradation(
+            code, passed = self.tier3_test_repair(
                 code, test_code, entry_point, client, generate_fn, token_tracker
             )
             if not passed:

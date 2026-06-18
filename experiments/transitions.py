@@ -1,4 +1,4 @@
-"""CD4Code: Per-Problem Transition Logging (Experiment 3)."""
+"""MultiGuardCode: Per-Problem Transition Logging (Experiment 3)."""
 
 
 class TransitionTracker:
@@ -15,7 +15,7 @@ class TransitionTracker:
             "passed": passed, "rounds": rounds_used
         }
 
-    def record_cd4code_mode(self, problem_id, mode_name, passed, tier_path=None):
+    def record_multiguardcode_mode(self, problem_id, mode_name, passed, tier_path=None):
         self._ensure(problem_id)
         entry = {"passed": passed}
         if tier_path:
@@ -26,7 +26,7 @@ class TransitionTracker:
         if problem_id not in self.problems:
             self.problems[problem_id] = {"problem_id": problem_id}
 
-    def compute_repaired_regressed(self, baseline_key="Raw", target_key="CD4Code"):
+    def compute_repaired_regressed(self, baseline_key="Raw", target_key="MultiGuardCode"):
         repaired = []
         regressed = []
         unchanged_pass = []

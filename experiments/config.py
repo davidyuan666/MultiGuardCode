@@ -1,4 +1,4 @@
-"""CD4Code Experiment Configuration.
+"""MultiGuardCode Experiment Configuration.
 
 All secrets and proxy settings are read from environment variables.
 Never hard-code API keys in this file.
@@ -13,8 +13,8 @@ DEEPSEEK_MODEL = "deepseek-v4-flash"
 # Proxy configuration (from environment variable)
 HTTP_PROXY = os.environ.get("HTTP_PROXY", os.environ.get("http_proxy", ""))
 
-# CD4Code tier parameters
-TIER1_CONFIDENCE_THRESHOLD = 0.6       # Token-level proofreading
+# MultiGuardCode tier parameters
+TIER1_CONFIDENCE_THRESHOLD = 0.6       # Token-level output filtering
 TIER2_LINTER = "pylint"                # Static analysis tool
 TIER2_TYPE_CHECKER = "mypy"            # Type checker
 TIER3_MAX_RETRIES = 3                  # Max regeneration attempts

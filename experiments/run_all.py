@@ -1,18 +1,18 @@
 #!/usr/bin/env python
-"""CD4Code: Full Experiment Pipeline with Baselines and Ablation.
+"""MultiGuardCode: Full Experiment Pipeline with Baselines and Ablation.
 
 Usage:
     python run_all.py                                   # Run all experiments
     python run_all.py --dataset humaneval               # HumanEval only
     python run_all.py --dataset mbpp                     # MBPP only
     python run_all.py --dataset mbpp --mbpp-full         # All 974 MBPP problems
-    python run_all.py --mode raw,cd4code                 # Specific modes
+    python run_all.py --mode raw,multiguardcode          # Specific modes
     python run_all.py --max-problems 20                  # Quick test
     python run_all.py --t4stress                         # All Tier4 stress tests
     python run_all.py --threshold-sweep                  # Threshold sensitivity
-    python run_all.py --mode cd4code --t4-threshold 0.25 # Override threshold
+    python run_all.py --mode multiguardcode --t4-threshold 0.25 # Override threshold
 
-Modes: raw, selfdebug, t3only, t123, cd4code,
+Modes: raw, selfdebug, t3only, t123, multiguardcode,
        t4stress_hard, t4stress_heat, t4stress_perturb, t4stress_combined
 """
 import os
@@ -32,7 +32,7 @@ from config import (
     STRESS_WEAKER_MAX_TOKENS,
 )
 from generate import create_client, generate_code, load_humaneval, load_mbpp, TokenTracker, perturb_prompt
-from suppressor import CD4CodeSuppressor
+from suppressor import MultiGuardCodeSuppressor
 from baselines import RawBaseline, SelfDebugBaseline
 from evaluate import ExperimentEvaluator, bootstrap_paired_test
 from transitions import TransitionTracker
@@ -86,7 +86,7 @@ def _select_hardest(problems, test_fn, entry_fn, client, n=30, prompt_fn=None):
         if not codes or not codes[0] or not codes[0].strip():
             scores.append((idx, True))
             continue
-        sup = CD4CodeSuppressor()
+        sup = MultiGuardCodeSuppressor()
         code = sup._extract_function_code(codes[0])
         import ast
         try:
@@ -104,22 +104,22 @@ def _select_hardest(problems, test_fn, entry_fn, client, n=30, prompt_fn=None):
     return selected
 
 
-def _run_cd4code_mode(problems, prompt_fn, test_fn, entry_fn, client,
+def _run_multiguardcode_mode(problems, prompt_fn, test_fn, entry_fn, client,
                       disabled_tiers=None, use_conservative_mode=False,
                       token_tracker=None, stress_temp=None, stress_top_p=None,
                       stress_max_tokens=None,
                       tier4_threshold_override=None,
                       t1_min_length_override=None,
                       t1_rep_window_override=None,
-                      transition_tracker=None, mode_label="CD4Code"):
-    """Run CD4Code with optional tier disabling for ablation."""
-    mode_name = "CD4Code" if disabled_tiers is None else \
+                      transition_tracker=None, mode_label="MultiGuardCode"):
+    """Run MultiGuardCode with optional tier disabling for ablation."""
+    mode_name = "MultiGuardCode" if disabled_tiers is None else \
         ("T1+T2+T3" if disabled_tiers == [4] else
          ("T3-Only" if set(disabled_tiers) == {1, 2, 4} else
           f"Ablation:{disabled_tiers}"))
     print(f"\n--- {mode_name} ---")
 
-    suppressor = CD4CodeSuppressor(
+    suppressor = MultiGuardCodeSuppressor(
         disabled_tiers=disabled_tiers,
         tier4_threshold_override=tier4_threshold_override,
         t1_min_length_override=t1_min_length_override,
@@ -147,7 +147,7 @@ def _run_cd4code_mode(problems, prompt_fn, test_fn, entry_fn, client,
             evaluator.add_result(idx, [""], [False])
             defect_history.append(suppressor.get_defect_ratio())
             if transition_tracker:
-                transition_tracker.record_cd4code_mode(
+                transition_tracker.record_multiguardcode_mode(
                     pid, mode_label, False, {"t1": "empty", "t2": "empty", "t3": "empty", "t4": "bypass"})
             continue
         code = code[0]
@@ -169,7 +169,7 @@ def _run_cd4code_mode(problems, prompt_fn, test_fn, entry_fn, client,
 
         evaluator.add_result(idx, [code], [passed])
         if transition_tracker:
-            transition_tracker.record_cd4code_mode(
+            transition_tracker.record_multiguardcode_mode(
                 pid, mode_label, passed, result.get("tier_path"))
 
         if (idx + 1) % 5 == 0:
@@ -289,21 +289,21 @@ def _run_threshold_sweep(problems, prompt_fn, test_fn, entry_fn, client,
     sweep_results = {}
     for tval in threshold_values:
         print(f"\n  --- T4 Threshold = {tval} ---")
-        result = _run_cd4code_mode(
+        result = _run_multiguardcode_mode(
             problems, prompt_fn, test_fn, entry_fn, client,
             disabled_tiers=None, use_conservative_mode=True,
             token_tracker=token_tracker,
             tier4_threshold_override=tval,
-            mode_label=f"CD4Code_T{tval}",
+            mode_label=f"MultiGuardCode_T{tval}",
         )
         result["threshold"] = tval
-        sweep_results[f"CD4Code_T{tval:.1f}"] = result
+        sweep_results[f"MultiGuardCode_T{tval:.1f}"] = result
 
     print(f"\n  Threshold Sweep Summary:")
     print(f"  {'Threshold':<12} {'Pass@1':<10} {'FDD':<10} {'T4 Act':<10} {'Filtered':<10}")
     print(f"  {'-' * 52}")
     for tval in threshold_values:
-        key = f"CD4Code_T{tval:.1f}"
+        key = f"MultiGuardCode_T{tval:.1f}"
         r = sweep_results[key]
         m = r["metrics"]
         s = r["stats"]
@@ -324,7 +324,7 @@ def run_experiments(args):
     client = create_client()
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    all_modes = ["raw", "selfdebug", "t3only", "t123", "cd4code",
+    all_modes = ["raw", "selfdebug", "t3only", "t123", "multiguardcode",
                  "t4stress_hard", "t4stress_heat", "t4stress_combined",
                  "t4stress_perturb"]
     if args.mode:
@@ -388,7 +388,7 @@ def run_experiments(args):
                 key = f"{ds_name}_SelfDebug"
 
             elif mode == "t3only":
-                result = _run_cd4code_mode(
+                result = _run_multiguardcode_mode(
                     problems, prompt_fn, te_fn, en_fn, client,
                     disabled_tiers=[1, 2, 4], use_conservative_mode=False,
                     token_tracker=tt, transition_tracker=trans_tracker,
@@ -396,21 +396,21 @@ def run_experiments(args):
                 key = f"{ds_name}_T3Only"
 
             elif mode == "t123":
-                result = _run_cd4code_mode(
+                result = _run_multiguardcode_mode(
                     problems, prompt_fn, te_fn, en_fn, client,
                     disabled_tiers=[4], use_conservative_mode=False,
                     token_tracker=tt, transition_tracker=trans_tracker,
                     mode_label="T123")
                 key = f"{ds_name}_T123"
 
-            elif mode == "cd4code":
-                result = _run_cd4code_mode(
+            elif mode == "multiguardcode":
+                result = _run_multiguardcode_mode(
                     problems, prompt_fn, te_fn, en_fn, client,
                     disabled_tiers=None, use_conservative_mode=True,
                     token_tracker=tt, transition_tracker=trans_tracker,
                     tier4_threshold_override=args.t4_threshold,
-                    mode_label="CD4Code")
-                key = f"{ds_name}_CD4Code"
+                    mode_label="MultiGuardCode")
+                key = f"{ds_name}_MultiGuardCode"
 
             elif mode == "t4stress_hard":
                 print("\n  [T4Stress-Hard] Selecting hardest problems...")
@@ -419,7 +419,7 @@ def run_experiments(args):
                     prompt_fn=prompt_fn)
                 print(f"  [T4Stress-Hard] Running on {len(hard_problems)} "
                       f"hard problems with default temperature...")
-                result = _run_cd4code_mode(
+                result = _run_multiguardcode_mode(
                     hard_problems, prompt_fn, te_fn, en_fn, client,
                     disabled_tiers=None, use_conservative_mode=True,
                     token_tracker=tt, mode_label=f"{ds_name}_T4Stress_Hard")
@@ -428,7 +428,7 @@ def run_experiments(args):
             elif mode == "t4stress_heat":
                 print("\n  [T4Stress-Heat] Running with high temperature "
                       f"(T={STRESS_TEMPERATURE}, top_p={STRESS_TOP_P})...")
-                result = _run_cd4code_mode(
+                result = _run_multiguardcode_mode(
                     problems, prompt_fn, te_fn, en_fn, client,
                     disabled_tiers=None, use_conservative_mode=True,
                     token_tracker=tt,
@@ -442,7 +442,7 @@ def run_experiments(args):
                       f"(rate={STRESS_PERTURB_RATE})...")
                 perturbed_prompt_fn = _get_perturbed_prompt_fn(
                     prompt_fn, perturb_rate=STRESS_PERTURB_RATE)
-                result = _run_cd4code_mode(
+                result = _run_multiguardcode_mode(
                     problems, perturbed_prompt_fn, te_fn, en_fn, client,
                     disabled_tiers=None, use_conservative_mode=True,
                     token_tracker=tt,
@@ -457,7 +457,7 @@ def run_experiments(args):
                     prompt_fn=prompt_fn)
                 print(f"  [T4Stress-Combined] Running on {len(hard_problems)} "
                       "hard problems with high temperature...")
-                result = _run_cd4code_mode(
+                result = _run_multiguardcode_mode(
                     hard_problems, prompt_fn, te_fn, en_fn, client,
                     disabled_tiers=None, use_conservative_mode=True,
                     token_tracker=tt,
@@ -529,13 +529,13 @@ def run_experiments(args):
     print("=" * 60)
     for ds_name, _, _, _ in datasets:
         raw_key = f"{ds_name}_Raw"
-        cd4code_key = f"{ds_name}_CD4Code"
-        if raw_key in all_results and cd4code_key in all_results:
+        multiguardcode_key = f"{ds_name}_MultiGuardCode"
+        if raw_key in all_results and multiguardcode_key in all_results:
             raw_paired = all_results[raw_key]["evaluator"].get_paired_for_test()
-            cd4code_paired = all_results[cd4code_key]["evaluator"].get_paired_for_test()
+            multiguardcode_paired = all_results[multiguardcode_key]["evaluator"].get_paired_for_test()
             p_val, mean_diff, ci_lower, ci_upper = bootstrap_paired_test(
-                cd4code_paired, raw_paired)
-            print(f"  {ds_name}: CD4Code vs Raw")
+                multiguardcode_paired, raw_paired)
+            print(f"  {ds_name}: MultiGuardCode vs Raw")
             print(f"    Pass@1 mean difference: {mean_diff:+.4f}")
             print(f"    95% CI: [{ci_lower:+.4f}, {ci_upper:+.4f}]")
             print(f"    p-value (bootstrap): {p_val:.4f}"
@@ -543,11 +543,11 @@ def run_experiments(args):
                   f"{' **' if p_val < 0.01 else ''}"
                   f"{' ***' if p_val < 0.001 else ''}")
             raw_metrics = all_results[raw_key]["metrics"]
-            cd4_metrics = all_results[cd4code_key]["metrics"]
+            mgc_metrics = all_results[multiguardcode_key]["metrics"]
             print(f"    Raw     Pass@1={raw_metrics['pass_at_1']:.4f} "
                   f"95%CI {raw_metrics['pass_at_1_95ci']}")
-            print(f"    CD4Code Pass@1={cd4_metrics['pass_at_1']:.4f} "
-                  f"95%CI {cd4_metrics['pass_at_1_95ci']}")
+            print(f"    MultiGuardCode Pass@1={mgc_metrics['pass_at_1']:.4f} "
+                  f"95%CI {mgc_metrics['pass_at_1_95ci']}")
 
     # T4 stress activation summary
     print("\n" + "=" * 60)
@@ -571,19 +571,19 @@ def run_experiments(args):
 
         for ds_name, _, _, _ in datasets:
             raw_key = f"{ds_name}_Raw"
-            cd4code_key = f"{ds_name}_CD4Code"
-            if raw_key in all_results and cd4code_key in all_results:
+            multiguardcode_key = f"{ds_name}_MultiGuardCode"
+            if raw_key in all_results and multiguardcode_key in all_results:
                 fig_path = os.path.join(FIGURES_DIR, f"{ds_name}_defect_density_curve.pdf")
                 plot_defect_density_curve(
                     all_results[raw_key]["defect_history"],
-                    all_results[cd4code_key]["defect_history"],
+                    all_results[multiguardcode_key]["defect_history"],
                     fig_path
                 )
 
-        cd4code_key = f"{datasets[0][0]}_CD4Code"
-        if cd4code_key in all_results:
+        multiguardcode_key = f"{datasets[0][0]}_MultiGuardCode"
+        if multiguardcode_key in all_results:
             fig_path = os.path.join(FIGURES_DIR, "tier_survival.pdf")
-            plot_tier_survival(all_results[cd4code_key]["stats"], fig_path)
+            plot_tier_survival(all_results[multiguardcode_key]["stats"], fig_path)
 
         ablation_data = {v["config"]: v["metrics"] for k, v in all_results.items()
                         if k.startswith(datasets[0][0])}
@@ -612,9 +612,9 @@ def run_experiments(args):
             fig_path = os.path.join(FIGURES_DIR, "cost_comparison.pdf")
             plot_cost_comparison(token_data, fig_path)
 
-        cd4code_key = f"{datasets[0][0]}_CD4Code"
-        if cd4code_key in all_results:
-            ts = all_results[cd4code_key]["stats"].get("t4_activation_timeseries", [])
+        multiguardcode_key = f"{datasets[0][0]}_MultiGuardCode"
+        if multiguardcode_key in all_results:
+            ts = all_results[multiguardcode_key]["stats"].get("t4_activation_timeseries", [])
             if ts:
                 fig_path = os.path.join(FIGURES_DIR, "t4_activation_timeline.pdf")
                 plot_t4_activation_timeline(ts, fig_path)
@@ -629,7 +629,7 @@ def run_experiments(args):
                     fig_path = os.path.join(FIGURES_DIR, f"{ds_name}_transition_matrix.pdf")
                     plot_transition_matrix(rr, fig_path)
 
-        sweep_keys = sorted([k for k in all_results if "CD4Code_T" in k])
+        sweep_keys = sorted([k for k in all_results if "MultiGuardCode_T" in k])
         if sweep_keys:
             sweep_data = {}
             for k in sweep_keys:
@@ -667,11 +667,11 @@ def run_experiments(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="CD4Code Experiment Pipeline")
+    parser = argparse.ArgumentParser(description="MultiGuardCode Experiment Pipeline")
     parser.add_argument("--dataset", choices=["humaneval", "mbpp"],
                        help="Run specific dataset only")
     parser.add_argument("--mode", type=str,
-                       help="Comma-separated modes: raw,selfdebug,t3only,t123,cd4code,"
+                       help="Comma-separated modes: raw,selfdebug,t3only,t123,multiguardcode,"
                             "t4stress_hard,t4stress_heat,t4stress_perturb,t4stress_combined")
     parser.add_argument("--max-problems", type=int,
                        help="Limit number of problems")

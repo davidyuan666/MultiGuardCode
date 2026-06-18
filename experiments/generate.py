@@ -1,4 +1,4 @@
-"""CD4Code: LLM Code Generator using DeepSeek API."""
+"""MultiGuardCode: LLM Code Generator using DeepSeek API."""
 import os
 import json
 import time

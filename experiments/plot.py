@@ -1,4 +1,4 @@
-"""CD4Code: Plot generation for paper figures."""
+"""MultiGuardCode: Plot generation for paper figures."""
 import os
 import matplotlib
 matplotlib.use('Agg')
@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def plot_defect_density_curve(base_density_history, cd4code_density_history,
+def plot_defect_density_curve(base_density_history, multiguardcode_density_history,
                               save_path="defect_density_curve.pdf"):
     fig, ax = plt.subplots(figsize=(6, 4))
 
@@ -15,9 +15,9 @@ def plot_defect_density_curve(base_density_history, cd4code_density_history,
         ax.plot(base_x, base_density_history, 'r--', linewidth=1.5,
                 label='Base (No Suppression)', alpha=0.7)
 
-    cd4code_x = list(range(1, len(cd4code_density_history) + 1))
-    ax.plot(cd4code_x, cd4code_density_history, 'b-', linewidth=2.0,
-            label='CD4Code (Four Tiers)')
+    mgc_x = list(range(1, len(multiguardcode_density_history) + 1))
+    ax.plot(mgc_x, multiguardcode_density_history, 'b-', linewidth=2.0,
+            label='MultiGuardCode (Four Tiers)')
 
     ax.axvline(x=40, color='orange', linestyle=':', linewidth=1,
                label='Tier 4 Activation Threshold')
@@ -26,7 +26,7 @@ def plot_defect_density_curve(base_density_history, cd4code_density_history,
 
     ax.set_xlabel('Generation Attempt Index')
     ax.set_ylabel('Cumulative Defect Density')
-    ax.set_title('Defect Density Accumulation: Base vs. CD4Code')
+    ax.set_title('Defect Density Accumulation: Base vs. MultiGuardCode')
     ax.legend(fontsize=8, loc='upper left')
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -40,7 +40,7 @@ def plot_defect_density_curve(base_density_history, cd4code_density_history,
 def plot_tier_survival(tier_stats, save_path="tier_survival.pdf"):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 3.5))
 
-    tiers = ['Input\n(100%)', 'T1\nProofread', 'T2\nMMR', 'T3\nDegradation', 'Output']
+    tiers = ['Input\n(100%)', 'T1\nOutput Filter', 'T2\nAST Validate', 'T3\nTest Repair', 'Output']
     survival_rates = [100,
                       100 - tier_stats.get("t1_filtered", 0) / max(tier_stats.get("total", 1), 0.01) * 100,
                       85, 77, 55]
@@ -52,7 +52,7 @@ def plot_tier_survival(tier_stats, save_path="tier_survival.pdf"):
     for i, v in enumerate(survival_rates):
         ax1.text(i, v + 1.5, f'{v:.0f}%', ha='center', fontsize=8)
 
-    tier_names = ['T1\nProofread', 'T2\nMMR', 'T3\nDegradation', 'T4\nER Stress']
+    tier_names = ['T1\nOutput Filter', 'T2\nAST Validate', 'T3\nTest Repair', 'T4\nDefect Monitor']
     filter_rates = [
         tier_stats.get("t1_filtered", 0) / max(tier_stats.get("total", 1), 0.01),
         tier_stats.get("t2_filtered", 0) / max(tier_stats.get("total", 1), 0.01),
@@ -275,9 +275,9 @@ def plot_transition_matrix(repaired_regressed, save_path="transition_matrix.pdf"
     ax.set_yticks([0, 1])
     ax.set_xticklabels(['Fail', 'Pass'])
     ax.set_yticklabels(['Fail', 'Pass'])
-    ax.set_xlabel('CD4Code Result')
+    ax.set_xlabel('MultiGuardCode Result')
     ax.set_ylabel('Raw Baseline Result')
-    ax.set_title('Problem Transition Matrix\n(Fail/Pass from Raw -> CD4Code)')
+    ax.set_title('Problem Transition Matrix\n(Fail/Pass from Raw -> MultiGuardCode)')
 
     for i in range(2):
         for j in range(2):
@@ -288,7 +288,7 @@ def plot_transition_matrix(repaired_regressed, save_path="transition_matrix.pdf"
     n_total = sum(sum(r) for r in matrix)
     repair_rate = summary.get("n_repaired", 0) / max(n_total, 1)
     regression_rate = summary.get("n_regressed", 0) / max(n_total, 1)
-    ax.set_xlabel(f'CD4Code Result\n(Repair={repair_rate:.1%}, Regression={regression_rate:.1%})')
+    ax.set_xlabel(f'MultiGuardCode Result\n(Repair={repair_rate:.1%}, Regression={regression_rate:.1%})')
 
     fig.tight_layout()
     os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else ".", exist_ok=True)

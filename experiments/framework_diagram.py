@@ -1,4 +1,4 @@
-"""CD4Code: Framework Diagram Generation."""
+"""MultiGuardCode: Framework Diagram Generation."""
 import os
 import matplotlib
 matplotlib.use('Agg')
@@ -9,143 +9,97 @@ import numpy as np
 
 
 def draw_framework_diagram(save_path="framework_diagram.pdf"):
-    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-    ax.set_xlim(0, 10)
-    ax.set_ylim(0, 10)
+    fig, ax = plt.subplots(1, 1, figsize=(14, 6))
+    ax.set_xlim(0, 14)
+    ax.set_ylim(0, 6)
     ax.axis('off')
 
-    # Colors
-    color_bio = '#1565C0'       # blue for biology
-    color_bio_light = '#E3F2FD'
-    color_code = '#E65100'      # orange for code generation
-    color_code_light = '#FFF3E0'
-    color_tier = '#2E7D32'      # green for tier labels
-    color_error = '#C62828'     # red for error arrows
+    color_source = '#1565C0'
+    color_source_light = '#E3F2FD'
+    color_tier = '#2E7D32'
+    color_tier_light = '#E8F5E9'
+    color_error = '#C62828'
+    color_error_light = '#FFEBEE'
 
-    # Column positions
-    left_col = 1.3
-    mid_col = 4.0
-    right_col = 6.7
-    box_width = 2.2
-    box_height = 1.1
-    tier_width = 1.0
+    # Pipeline stages
+    stages = [
+        {"x": 1.5, "label": "LLM\nGeneration", "desc": "Prompt-based\ncode synthesis"},
+        {"x": 4.0, "label": "T1: Output\nFilter", "desc": "Length/repetition\nquality check"},
+        {"x": 6.5, "label": "T2: AST\nValidate", "desc": "Code extraction +\nsyntax validation"},
+        {"x": 9.0, "label": "T3: Test\nRepair", "desc": "Test-driven iterative\nregeneration"},
+        {"x": 11.5, "label": "T4: Defect\nMonitor", "desc": "Global defect rate\nadaptive control"},
+    ]
 
-    # Y positions for each row
-    y_positions = [8.2, 6.2, 4.2, 2.2]
+    box_width = 2.0
+    box_height = 1.6
+    y_mid = 3.0
 
-    # Row labels
-    bio_labels = ['DNA\nReplication', 'Transcription\n(mRNA)', 'Translation\n(Protein)', 'Post-Translational\nQC']
-    bio_mechanisms = ['Polymerase\nProofreading', 'Mismatch Repair\n(MMR)', 'Ubiquitin-Proteasome\nDegradation', 'ER Stress\nResponse (UPR)']
-    code_labels = ['Prompt →\nToken Generation', 'Token Sequence\n→ AST Formation', 'AST → Code\nExecution', 'Global\nDefect Monitor']
-    tier_labels = ['Tier 1\nProofread', 'Tier 2\nMMR', 'Tier 3\nDegradation', 'Tier 4\nUPR']
+    for i, stage in enumerate(stages):
+        color = color_source_light if i == 0 else color_tier_light
+        edge = color_source if i == 0 else color_tier
 
-    # Draw boxes
-    for i in range(4):
-        y = y_positions[i]
-
-        # Biology box
-        rect_bio = FancyBboxPatch(
-            (left_col - box_width / 2, y - box_height / 2),
+        rect = FancyBboxPatch(
+            (stage["x"] - box_width / 2, y_mid - box_height / 2),
             box_width, box_height,
-            boxstyle="round,pad=0.1",
-            facecolor=color_bio_light,
-            edgecolor=color_bio,
+            boxstyle="round,pad=0.15",
+            facecolor=color,
+            edgecolor=edge,
             linewidth=2
         )
-        ax.add_patch(rect_bio)
-        ax.text(left_col, y, bio_labels[i],
-                ha='center', va='center', fontsize=10, fontweight='bold',
-                color=color_bio)
-
-        # Arrow: bio -> mechanism (center column)
-        ax.annotate('', xy=(mid_col - tier_width / 2 - 0.1, y),
-                    xytext=(left_col + box_width / 2 + 0.1, y),
-                    arrowprops=dict(arrowstyle='->', color=color_bio,
-                                    lw=2, connectionstyle='arc3,rad=0'))
-
-        # Mechanism label (center column)
-        ax.text(mid_col, y, bio_mechanisms[i],
+        ax.add_patch(rect)
+        ax.text(stage["x"], y_mid + 0.2, stage["label"],
+                ha='center', va='center', fontsize=11, fontweight='bold',
+                color=color_source if i == 0 else color_tier)
+        ax.text(stage["x"], y_mid - 0.55, stage["desc"],
                 ha='center', va='center', fontsize=8,
-                bbox=dict(boxstyle='round', facecolor='#F5F5F5',
-                          edgecolor='#BDBDBD', alpha=0.8))
+                color='#424242')
 
-        # Arrow: mechanism -> code
-        ax.annotate('', xy=(right_col - box_width / 2 - 0.1, y),
-                    xytext=(mid_col + 0.5, y),
-                    arrowprops=dict(arrowstyle='->', color=color_tier,
-                                    lw=2, connectionstyle='arc3,rad=0'))
+    # Flow arrows between stages
+    for i in range(len(stages) - 1):
+        x_start = stages[i]["x"] + box_width / 2 + 0.05
+        x_end = stages[i + 1]["x"] - box_width / 2 - 0.05
 
-        # Code generation box
-        rect_code = FancyBboxPatch(
-            (right_col - box_width / 2, y - box_height / 2),
-            box_width, box_height,
-            boxstyle="round,pad=0.1",
-            facecolor=color_code_light,
-            edgecolor=color_code,
-            linewidth=2
-        )
-        ax.add_patch(rect_code)
-        ax.text(right_col, y, code_labels[i],
-                ha='center', va='center', fontsize=9, fontweight='bold',
-                color=color_code)
+        ax.annotate('', xy=(x_end, y_mid),
+                    xytext=(x_start, y_mid),
+                    arrowprops=dict(arrowstyle='->', color='#424242',
+                                    lw=2.5, connectionstyle='arc3,rad=0'))
 
-        # Tier badge (right of code box)
-        tier_x = right_col + box_width / 2 + 0.6
-        ax.text(tier_x, y, tier_labels[i],
-                ha='center', va='center', fontsize=8, fontweight='bold',
-                color='white',
-                bbox=dict(boxstyle='circle,pad=0.3',
-                          facecolor=color_tier, edgecolor='none'))
-
-    # Vertical flow arrows between tiers
-    for i in range(3):
-        y_top = y_positions[i] - box_height / 2
-        y_bot = y_positions[i + 1] + box_height / 2
-        # Right side: Code generation flow
-        ax.annotate('', xy=(right_col, y_bot + 0.15),
-                    xytext=(right_col, y_top - 0.15),
-                    arrowprops=dict(arrowstyle='->', color=color_code,
-                                    lw=2.5))
-        # Left side: Biological flow
-        ax.annotate('', xy=(left_col, y_bot + 0.15),
-                    xytext=(left_col, y_top - 0.15),
-                    arrowprops=dict(arrowstyle='->', color=color_bio,
-                                    lw=2.5))
-
-    # Error accumulation indicator on the right side
-    error_x = 9.2
-    for i in range(4):
-        y = y_positions[i]
-        # Draw small error rate indicator
-        error_rates = [1e-1, 1e-2, 1e-4, 1e-8]
-        ax.text(error_x, y, f'ε ≈ {error_rates[i]:.0e}\nresidual',
+        mid_x = (x_start + x_end) / 2
+        ax.text(mid_x, y_mid - 0.3, f'S{i+2}',
                 ha='center', va='center', fontsize=7,
-                color=color_error,
-                bbox=dict(boxstyle='round', facecolor='#FFEBEE',
-                          edgecolor=color_error, alpha=0.7))
+                color='#757575', fontstyle='italic')
 
-    # Column headers
-    header_y = 9.4
-    ax.text(left_col, header_y, 'Biology\n(Central Dogma)',
-            ha='center', va='center', fontsize=13, fontweight='bold',
-            color=color_bio)
-    ax.text(mid_col, header_y, 'Quality Control\nMechanism',
-            ha='center', va='center', fontsize=11, fontweight='bold',
-            color='#424242')
-    ax.text(right_col, header_y, 'Code Generation\nPipeline',
-            ha='center', va='center', fontsize=13, fontweight='bold',
-            color=color_code)
+    # Feedback loop for T3
+    ax.annotate('', xy=(stages[2]["x"] + 0.6, y_mid + box_height / 2 + 0.3),
+                xytext=(stages[3]["x"] - 0.6, y_mid + box_height / 2 + 0.3),
+                arrowprops=dict(arrowstyle='->', color=color_error,
+                                lw=1.5, connectionstyle='arc3,rad=0.4'))
+    ax.annotate('', xy=(stages[3]["x"] - 0.6, y_mid + box_height / 2 + 0.05),
+                xytext=(stages[2]["x"] + 0.6, y_mid + box_height / 2 + 0.05),
+                arrowprops=dict(arrowstyle='->', color=color_error,
+                                lw=1.5, connectionstyle='arc3,rad=-0.4'))
 
-    # Legend for colors (bottom)
-    ax.text(1.0, 0.6, '■ Biology\t■ QC Mechanism\t■ Code Gen\t● Tiers\t■ Error Rate',
-            fontsize=7, color='#616161', ha='left')
+    ax.text((stages[2]["x"] + stages[3]["x"]) / 2, y_mid + box_height / 2 + 0.55,
+            'Failure\nFeedback', ha='center', va='center', fontsize=7,
+            color=color_error, fontweight='bold')
+
+    # Error elimination text below pipeline
+    ax.text(1.5, y_mid - box_height / 2 - 0.65, 'Raw output\nmay contain errors',
+            ha='center', va='center', fontsize=7, color=color_error)
+    ax.text(11.5, y_mid - box_height / 2 - 0.65, 'Validated\nreliable code',
+            ha='center', va='center', fontsize=7, color=color_tier)
 
     # Title
-    ax.text(5.0, 9.9, 'CD4Code: A Central Dogma-Inspired Multi-Tier Error Suppression Framework',
-            ha='center', va='center', fontsize=16, fontweight='bold',
+    ax.text(6.5, 5.5, 'MultiGuardCode: Multi-Tier Error Suppression Framework for LLM Code Generation',
+            ha='center', va='center', fontsize=15, fontweight='bold',
             color='#212121')
 
-    fig.tight_layout(rect=[0, 0.02, 1, 0.97])
+    # Subtitle
+    ax.text(6.5, 5.0, 'Four-stage pipeline: filter, validate, repair, and monitor generated code',
+            ha='center', va='center', fontsize=10,
+            color='#616161')
+
+    fig.tight_layout(rect=[0, 0.02, 1, 0.95])
 
     os.makedirs(os.path.dirname(save_path) if os.path.dirname(save_path) else ".", exist_ok=True)
     fig.savefig(save_path, dpi=200, bbox_inches='tight')

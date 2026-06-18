@@ -1,10 +1,9 @@
-"""CD4Code: Baseline Generators (Raw + Self-Debug)."""
+"""MultiGuardCode: Baseline Generators (Raw + Self-Debug)."""
 import ast
-import re
 import subprocess
 import tempfile
 import os
-from suppressor import CD4CodeSuppressor
+from suppressor import MultiGuardCodeSuppressor
 
 
 class RawBaseline:
@@ -15,7 +14,7 @@ class RawBaseline:
     """
 
     def __init__(self):
-        self.suppressor = CD4CodeSuppressor()
+        self.suppressor = MultiGuardCodeSuppressor()
         self.passed = 0
         self.total = 0
         self.failures = []
@@ -55,13 +54,13 @@ class RawBaseline:
 class SelfDebugBaseline:
     """Standard LLM self-repair: generate, test, fix, retest (up to 3 rounds).
 
-    No biological framework, no tier structure, no global monitoring.
-    Just the raw model trying to fix its own errors.
+    The model attempts to fix its own errors through iterative self-debugging
+    without tier-structured filtering or global monitoring.
     """
 
     def __init__(self, max_rounds=3):
         self.max_rounds = max_rounds
-        self.suppressor = CD4CodeSuppressor()
+        self.suppressor = MultiGuardCodeSuppressor()
         self.passed = 0
         self.total = 0
         self.fixed_count = 0

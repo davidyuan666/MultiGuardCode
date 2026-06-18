@@ -1,4 +1,4 @@
-"""CD4Code: Evaluation and Metrics."""
+"""MultiGuardCode: Evaluation and Metrics."""
 import json
 import os
 import random
@@ -72,7 +72,6 @@ def bootstrap_paired_test(results_a, results_b, n_bootstrap=BOOTSTRAP_SAMPLES):
     ci_lower = boot_diffs[int(alpha * n_bootstrap)]
     ci_upper = boot_diffs[int((1.0 - alpha) * n_bootstrap)]
 
-    # Two-sided p-value from bootstrap null distribution
     centered = [d - obs_diff for d in boot_diffs]
     p_value = sum(1 for d in centered if abs(d) >= abs(obs_diff)) / n_bootstrap
 
